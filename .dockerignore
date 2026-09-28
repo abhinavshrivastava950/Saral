@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.local
+.env*
+*.log
+tests
+test-results
+playwright-report
+.codex-ppt-build
+.codex-ppt-rebuild

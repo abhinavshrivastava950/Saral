@@ -1,0 +1,14 @@
+import {describe,expect,it} from "vitest";
+import {emptySalary,emptyScope,emptyDeclarations,type Filing} from "../src/lib/domain";
+import {initialConversation} from "../src/lib/chat";
+import {draftChanges,questionInHindi,resolvedVoiceLanguage,voiceGreeting,voiceReply} from "../src/lib/voice-language";
+import {isKnowledgeQuestion} from "../src/server/knowledge";
+function fixture():Filing{return {id:"test",ownerId:"test",year:"2026-27",revision:1,createdAt:"",updatedAt:"",status:"draft",salary:{...emptySalary(),depositInterest:18000},scope:emptyScope(),declarations:emptyDeclarations(),confirmedFields:[],pending:null,regime:"new",processingConsentAt:"",aiConsentAt:null,prefillConsentAt:null,prefill:null,prefillSource:"unavailable",reviewHash:null,reviewConfirmedAt:null,officialReference:null,acknowledgement:null,paymentStatus:"unavailable",submissionKey:null,conversation:initialConversation()};}
+describe("Hindi voice edits",()=>{
+  it("explains the actual saved change in Hindi and preserves its exact value",()=>{const before=fixture(),after=structuredClone(before);after.salary.depositInterest=22500;const reply=voiceReply(before,after,null,"hi","अठारह नहीं, बाईस हजार पांच सौ");expect(reply.text).toContain("22,500 रुपये");expect(reply.text).toContain("एफडी");expect(reply.changes[0]).toMatchObject({key:"salary.depositInterest",before:"18,000",after:"22,500"});expect(reply.text).not.toContain("filed");});
+  it("asks the missing question in Hindi without reading an English template",()=>{expect(questionInHindi({id:"salary.depositInterest",text:"English question"})).toContain("सालाना ब्याज");expect(voiceGreeting(fixture(),null,"hi")).toContain("हिंदी");});
+  it("respects language selection and detects Hindi/Hinglish in auto mode",()=>{expect(resolvedVoiceLanguage("hi","English answer")).toBe("hi");expect(resolvedVoiceLanguage("auto","मेरी एफडी का ब्याज")).toBe("hi");expect(resolvedVoiceLanguage("auto","meri FD badal do")).toBe("hi");expect(resolvedVoiceLanguage("auto","My FD interest")).toBe("en");});
+  it("a polite Hindi correction is an editing request, not just a knowledge question",()=>{expect(isKnowledgeQuestion("क्या आप मेरा एफडी ब्याज बाईस हजार पांच सौ कर के बदल सकते हैं?")).toBe(false);expect(isKnowledgeQuestion("क्या नई कर व्यवस्था बेहतर है?")).toBe(true);});
+  it("masks bank account changes in UI and speech summaries",()=>{const before=fixture(),after=structuredClone(before);before.conversation!.profileDraft.bankAccount="1234567890";after.conversation!.profileDraft.bankAccount="9876543210";const changes=draftChanges(before,after);expect(changes[0].after).not.toContain("9876543210");expect(changes[0].before).not.toContain("1234567890");});
+  it("does not invent a saved change for an unchanged draft",()=>{const f=fixture();expect(draftChanges(f,f)).toEqual([]);expect(voiceReply(f,f,null,"hi","ठीक है").text).toContain("कोई बदलाव नहीं");});
+});

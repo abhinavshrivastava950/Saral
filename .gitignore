@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.local/
+.env*
+!.env.example
+*.tsbuildinfo
+coverage/
+*.log
+.sites-runtime/
+test-results/
+playwright-report/
+artifacts/
+/.codex-ppt-build/
+/.codex-ppt-rebuild/
