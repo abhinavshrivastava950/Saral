@@ -15,16 +15,17 @@ export async function createFiling(ownerId:string,requestId:string){
 export function assertEditable(f:Filing){if(!["draft","prepared"].includes(f.status)||f.demo?.phase==="submitted"||f.demo?.phase==="verified")throw new AppError(409,"filing_locked","A submitted return cannot be changed in this workflow. Start a new demo to try another scenario.");}
 export async function updateFiling(f:Filing,raw:unknown,requestId:string){
   assertEditable(f);const patch=editableFilingSchema.parse(raw);
+  if(f.pending)throw new AppError(409,"proposal_pending","Review or discard the document extraction before editing this draft.");
   if(patch.revision!==f.revision)throw new AppError(409,"revision_conflict","Your return changed. Reload before saving.");
   const {revision:_,...fields}=patch;
   let confirmed=patch.confirmedFields??f.confirmedFields;
   if(patch.salary&&!patch.confirmedFields)confirmed=confirmed.filter(k=>f.salary[k]===patch.salary![k]);
   const salary=patch.salary??f.salary;confirmed=confirmed.filter(k=>salary[k]!==null);
   const conversation=f.conversation?{...f.conversation,confirmedAt:null}:undefined;
-  const updated={...f,...fields,salary,conversation,confirmedFields:[...new Set(confirmed)],status:"draft" as const,pending:null,reviewHash:null,reviewConfirmedAt:null,revision:f.revision+1,updatedAt:new Date().toISOString()};
+  const updated={...f,...fields,salary,conversation,confirmedFields:[...new Set(confirmed)],status:"draft" as const,pending:null,pendingKind:null,reviewHash:null,reviewConfirmedAt:null,revision:f.revision+1,updatedAt:new Date().toISOString()};
   return saveFiling(updated,f.revision,auditEvent(f.ownerId,f.id,"filing.fields_confirmed",requestId,{fieldCount:confirmed.length}));
 }
-export function snapshotHash(f:Filing,p:Profile){return hash({year:f.year,salary:f.salary,scope:f.scope,declarations:f.declarations,confirmed:f.confirmedFields,regime:f.regime,prefill:f.prefill,profile:effectiveProfile(f,p),rule:"AY2026-27-salary-v1"});}
+export function snapshotHash(f:Filing,p:Profile){return hash({year:f.year,salary:f.salary,scope:f.scope,declarations:f.declarations,demoHomeLoan:f.demo?.homeLoanAnswer,confirmed:f.confirmedFields,regime:f.regime,prefill:f.prefill,profile:effectiveProfile(f,p),rule:"AY2026-27-salary-v1"});}
 function chatCandidate(f:Filing){
   const candidate=withConfirmedFacts(f);
   if(!preparationIssues(candidate).some(i=>i.severity==="error")){
@@ -39,10 +40,11 @@ export async function viewFiling(f:Filing){
   const problem=preparationIssues(candidate).find(issue=>issue.severity==="error");
   const finishedDemo=f.demo?.phase==="submitted"||f.demo?.phase==="verified";
   const question=finishedDemo?null:nextChatQuestion(f,stored)??(problem?{id:"validation",text:problem.message+" Please clarify the information and its source in chat."}:null);
-  return {filing:f,estimates,preparationIssues:issues,filingIssues:filingIssues(f,profile),reviewHash:snapshotHash(f,stored),chatQuestion:question,chatFacts:reviewFacts(f,stored),chatCanReview:!finishedDemo&&chatReady(f,stored)&&estimates!==null,chatReviewHash:snapshotHash(candidate,stored),recommendedRegime:candidate.regime};
+  return {filing:f,estimates,preparationIssues:issues,filingIssues:filingIssues(f,profile),reviewHash:snapshotHash(f,stored),chatQuestion:question,chatFacts:reviewFacts(f,stored),chatCanReview:!finishedDemo&&!f.pending&&chatReady(f,stored)&&estimates!==null,chatReviewHash:snapshotHash(candidate,stored),recommendedRegime:candidate.regime};
 }
 export async function confirmChatReview(f:Filing,expectedHash:string,requestId:string){
   assertEditable(f);const profile=await getProfile(f.ownerId),candidate=chatCandidate(f);
+  if(f.pending)throw new AppError(409,"proposal_pending","Review or discard the document extraction before approving this draft.");
   if(!chatReady(f,profile)||preparationIssues(candidate).some(i=>i.severity==="error"))throw new AppError(422,"chat_incomplete","There are still missing or uncertain facts. Please resolve them in the conversation first.");
   if(snapshotHash(candidate,profile)!==expectedHash)throw new AppError(409,"review_changed","Some details changed. Please read the latest summary before approving it.");
   const now=new Date().toISOString();candidate.conversation??=initialConversation();candidate.conversation.confirmedAt=now;
@@ -51,6 +53,7 @@ export async function confirmChatReview(f:Filing,expectedHash:string,requestId:s
 }
 export async function confirmReview(f:Filing,expectedHash:string,requestId:string){
   assertEditable(f);const profile=await getProfile(f.ownerId);
+  if(f.pending)throw new AppError(409,"proposal_pending","Review or discard the document extraction before approving this draft.");
   if(preparationIssues(f).some(i=>i.severity==="error"))throw new AppError(422,"incomplete_return","Confirm your salary details and eligibility first.");
   const currentHash=snapshotHash(f,profile);if(currentHash!==expectedHash)throw new AppError(409,"review_changed","Details changed after review. Please review the latest version.");
   return saveFiling({...f,status:"prepared",reviewHash:currentHash,reviewConfirmedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),revision:f.revision+1},f.revision,auditEvent(f.ownerId,f.id,"review.confirmed",requestId));

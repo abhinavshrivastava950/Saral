@@ -13,8 +13,26 @@ test("motion demo is responsive, readable and has no tax-entry forms",async({pag
   await page.emulateMedia({reducedMotion:"reduce"});expect(await page.locator('.orb-shell').first().evaluate(el=>getComputedStyle(el).animationName)).toBe("none");expect(errors).toEqual([]);
 });
 
+test("upload-first demo waits for a fictional Form 16 and explicit AI consent",async({page})=>{
+  await page.goto("/");
+  await expect(page.getByRole("button",{name:/Upload sample Form 16/})).toHaveClass(/selected/);
+  await page.getByRole("button",{name:/Experience the demo/}).click();
+  await expect(page.getByRole("heading",{name:"Upload a sample Form 16"})).toBeVisible();
+  const id=new URL(page.url()).pathname.split("/")[2];
+  const state=await (await page.request.get(`/api/filings/${id}`)).json();
+  expect(state.filing.salary.annualSalary).toBeNull();
+  expect(state.filing.salary.depositInterest).toBeNull();
+  await expect(page.getByRole("link",{name:"Download sample image"})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Download sample PDF"})).toBeVisible();
+  expect((await page.request.get("/samples/form16-fictional-sample.pdf")).ok()).toBe(true);
+  await page.locator("#demo-form16").setInputFiles("public/samples/form16-fictional-sample.png");
+  await expect(page.getByRole("button",{name:"Extract sample Form 16"})).toBeDisabled();
+  await page.getByLabel(/I confirm this document contains fictional information/).check();
+  await expect(page.getByRole("button",{name:"Extract sample Form 16"})).toBeEnabled();
+});
+
 test("full demo reaches an explicitly simulated receipt without an ERI",async({page})=>{
-  await page.goto("/");await page.getByRole("button",{name:/Experience the demo/}).click();
+  await page.goto("/");await page.getByRole("button",{name:/Everything connected/}).click();await page.getByRole("button",{name:/Experience the demo/}).click();
   await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
   const id=new URL(page.url()).pathname.split("/")[2];
   await expect(page.getByRole("button",{name:/Approve summary/})).toBeDisabled();
@@ -31,7 +49,8 @@ test("full demo reaches an explicitly simulated receipt without an ERI",async({p
 test("one-question scenario uses the chat and voice requires explicit microphone consent",async({page})=>{
   await page.goto("/");await page.getByRole("button",{name:/Just one question/}).click();await page.getByRole("button",{name:/Experience the demo/}).click();
   await expect(page.getByRole("heading",{name:"Just one thing, Aarav."})).toBeVisible();
-  expect(await page.locator('input[type="number"],input[type="file"]').count()).toBe(0);
+  expect(await page.locator('input[type="number"]').count()).toBe(0);
+  await expect(page.locator('input[type="file"]')).toHaveCount(1);
   await page.getByRole("button",{name:"Voice call",exact:true}).click();
   await expect(page.getByRole("dialog")).toBeVisible();await expect(page.getByRole("button",{name:"Agree & start voice call"})).toBeVisible();
   await page.screenshot({path:"artifacts/saral-voice-call.png",fullPage:true,animations:"disabled"});
@@ -68,7 +87,7 @@ test("ending a voice call releases microphone tracks and closes the audio contex
     Object.defineProperty(window,"AudioContext",{configurable:true,value:FakeAudioContext});Object.defineProperty(window,"MediaRecorder",{configurable:true,value:FakeRecorder});
   });
   await page.route("**/api/filings/*/speech",route=>route.fulfill({status:200,contentType:"audio/wav",body:Buffer.from("mock-audio")}));
-  await page.goto("/");await page.getByRole("button",{name:/Experience the demo/}).click();await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
+  await page.goto("/");await page.getByRole("button",{name:/Everything connected/}).click();await page.getByRole("button",{name:/Experience the demo/}).click();await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
   await page.getByRole("button",{name:"Voice call",exact:true}).click();
   expect(await page.evaluate(()=>(window as typeof window&{voiceStops:number}).voiceStops)).toBe(0);
   await page.getByRole("button",{name:"Agree & start voice call"}).click();await expect(page.getByRole("heading",{name:"I’m listening."})).toBeVisible();

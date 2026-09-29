@@ -8,7 +8,7 @@ See [required provider connections and the normalized gateway contract](docs/rec
 
 ## Interactive demo — ready to try
 
-The local app now opens a complete motion-led demo. Choose **Everything connected** for a zero-question journey or **Just one question** to let GPT-6 Luna fill a missing FD-interest amount from chat. Review, simulate filing, simulate verification, and download a prominently marked demo receipt. No actual ITR is filed.
+The default **Upload sample Form 16** journey starts with blank salary and employer fields. Download the included [fictional PNG](public/samples/form16-fictional-sample.png) or [fictional PDF](public/samples/form16-fictional-sample.pdf), upload it with explicit AI consent, review every proposed value and select only the fields to apply. GPT-6 Luna reads the image or PDF; it does not silently edit the draft. Saral then asks about missing items such as employer TAN, NPS treatment, annual FD interest, home loans and other deductions. The deterministic engine compares tax regimes after supported facts are confirmed. A disclosed home loan or other unsupported situation is held for review, not auto-filed. **Everything connected** still offers a zero-question journey, and **Just one question** asks only for FD interest. All journeys use fictional sample data and end in a clearly marked simulated receipt; no actual ITR is filed.
 
 **Talk to Saral** opens the voice-call experience: OpenAI speech recognition → GPT-6 Luna reasoning → OpenAI spoken reply. The call defaults to Hindi and minimizes into a floating panel while you navigate the app. Spoken answers and corrections save directly to the same bound draft and refresh its summary; final approval stays on screen. Gemini also supplies bounded explanatory notes for tax questions. See [demo and voice documentation](docs/demo-and-voice.md) for provider configuration, microphone behavior and smoke tests. All keys remain server-side.
 
@@ -18,7 +18,7 @@ Implemented: responsive saffron English/Hindi UI; passwordless Supabase authenti
 
 **This is a production-oriented foundation, not a certified live filing service.** Live ERI submission deliberately remains blocked until the official schema mapping, current filing-date/interest/fee rules and approved integration are certified. The isolated local demo uses explicitly fictional records and DEMO-labelled receipts. It never claims those are official acknowledgements or fetched taxpayer data. Live AI responses use the configured providers. Loans, additional income and unimplemented deductions are recorded and flagged, not silently excluded from an allegedly complete return.
 
-The collection mode is now conversation-only. A normalized approved-data gateway fills known facts and supplies source references; GPT interprets only missing or corrected answers. The final summary is read-only and corrections are made in chat.
+The production design remains fetch-first and conversation-led. The local upload-first journey is a working fallback demonstration for a fictional Form 16 when an employer connection is unavailable. GPT interprets uploaded values and missing or corrected answers; the user selects extracted fields, and later corrections are made in chat or voice. The final summary is read-only.
 
 The calculation subset is **AY 2026–27 / FY 2025–26**, resident ordinarily resident adults under 60, salary plus ordinary bank savings/FD/RD interest, taxable income at most ₹50 lakh. This is narrower than statutory ITR-1 eligibility. It excludes property income/loss, capital gains, business, foreign situations and the other cases described by the eligibility questions. Loan/HRA claims and additional-income notes require review before filing. The estimate is explicitly a **core estimate before filing adjustments**.
 
@@ -31,7 +31,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:3000** and click **Experience the demo**. It creates an isolated local session and uses the fictional Aarav Sharma profile—no PAN entry or tax form needed. Choose a scenario, review the prepared summary, and continue through simulated submission and verification. **Talk to Saral** adds voice after explicit microphone consent.
+Open **http://127.0.0.1:3000** and click **Experience the demo**. It creates an isolated local session with fictional Aarav Sharma details. The default scenario asks you to upload one of the bundled fictional Form 16 samples, approve proposed fields, answer only remaining questions, then review and complete simulated submission and verification. The fictional name and supported tax figures can also be changed by chat or voice before submission; any change revokes prior approval. **Talk to Saral** adds voice after explicit microphone consent.
 
 The local sample workspace deliberately does not fetch real taxpayer records. Do not use actual PAN or tax data there. A configured OpenAI key can be checked with `node scripts/check-ai.mjs`; that check sends no taxpayer information and never prints the key.
 

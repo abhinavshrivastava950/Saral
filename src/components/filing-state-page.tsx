@@ -23,6 +23,7 @@ export function FilingStatePage({id,section,session}:{id:string;section:Section;
 
   const filing=view.filing;
   const demo=Boolean(filing.demo);
+  const demoName=filing.conversation?.profileDraft.name?.trim()||"Aarav Sharma";
   const home=`/filings/${id}`;
   const phase=filing.demo?.phase;
   const demoSubmitted=phase==="submitted"||phase==="verified";
@@ -52,7 +53,7 @@ export function FilingStatePage({id,section,session}:{id:string;section:Section;
   const demoReceipt=filing.demo?.acknowledgement;
   const officialReceipt=filing.acknowledgement;
   return <div className="filing-state-page"><div className="page-heading"><div><span className="eyebrow">ACKNOWLEDGEMENT · पावती</span><h1>{demo?"Your demo receipt":"Your acknowledgement"}</h1><p>{demo?"Fictional journey only. No real filing was made.":"We display an official acknowledgement only after the filing service confirms it."}</p></div></div>
-    {demo&&demoVerified&&demoReceipt?<section className="card form-section state-receipt"><FileCheck2 size={32}/><span className="status-badge">DEMO RECEIPT · NOT FILED</span><h2>Demo journey complete</h2><dl><div><dt>Sample taxpayer</dt><dd>Aarav Sharma</dd></div><div><dt>Assessment year</dt><dd>2026–27</dd></div><div><dt>Demo reference</dt><dd>{demoReceipt.number}</dd></div></dl><div className="notice">NOT FILED WITH THE INCOME TAX DEPARTMENT</div><div className="button-row"><a className="button" href={`/api/filings/${id}/demo-receipt`}><Download size={16}/> Download demo receipt</a><Link className="button secondary" href={`${home}/status`}>View journey</Link></div></section>
+    {demo&&demoVerified&&demoReceipt?<section className="card form-section state-receipt"><FileCheck2 size={32}/><span className="status-badge">DEMO RECEIPT · NOT FILED</span><h2>Demo journey complete</h2><dl><div><dt>Sample taxpayer</dt><dd>{demoName}</dd></div><div><dt>Assessment year</dt><dd>2026–27</dd></div><div><dt>Demo reference</dt><dd>{demoReceipt.number}</dd></div></dl><div className="notice">NOT FILED WITH THE INCOME TAX DEPARTMENT</div><div className="button-row"><a className="button" href={`/api/filings/${id}/demo-receipt`}><Download size={16}/> Download demo receipt</a><Link className="button secondary" href={`${home}/status`}>View journey</Link></div></section>
     :!demo&&officialReceipt?<section className="card form-section state-receipt"><ShieldCheck size={32}/><span className="status-badge">OFFICIAL ACKNOWLEDGEMENT</span><h2>Confirmed by the filing service</h2><dl><div><dt>Acknowledgement number</dt><dd>{officialReceipt.number}</dd></div><div><dt>Received</dt><dd>{new Date(officialReceipt.receivedAt).toLocaleString("en-IN")}</dd></div></dl>{officialReceipt.url&&<a className="button" href={officialReceipt.url} target="_blank" rel="noreferrer">Open official acknowledgement <ArrowRight size={16}/></a>}</section>
     :<section className="card empty-state"><FileCheck2 size={34}/><h2>{demo?"No demo receipt yet":"No official acknowledgement yet"}</h2><p>{demo?"Finish the simulated review, submission and verification to create a clearly marked demo receipt.":"Check your return and complete the supported official filing and e-verification steps."}</p><Link className="button" href={home}>Continue this return <ArrowRight size={16}/></Link></section>}
   </div>;

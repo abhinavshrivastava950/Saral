@@ -11,6 +11,27 @@ beforeEach(()=>{state.local=true;state.save.mockImplementation(async f=>f);state
 describe("isolated filing simulation",()=>{
   it("complete demo calculates real deterministic amounts and never assigns an official reference",async()=>{const f=populateDemo(await startDemo("owner","complete","test"));const view=await viewFiling(f);expect(view.chatCanReview).toBe(true);expect(view.chatQuestion).toBeNull();expect(view.estimates?.new.estimatedRefund).toBe(22830);expect(f.prefillSource).toBe("unavailable");expect(f.officialReference).toBeNull();expect(f.acknowledgement).toBeNull();});
   it("missing-interest scenario leaves the required value unknown",async()=>{const f=populateDemo(await startDemo("owner","missing-interest","test"));const view=await viewFiling(f);expect(f.salary.depositInterest).toBeNull();expect(view.chatQuestion?.id).toBe("salary.depositInterest");expect(view.chatCanReview).toBe(false);});
+  it("upload-first scenario waits for an employee-supplied fictional Form 16",async()=>{
+    const f=populateDemo(await startDemo("owner","upload-form16","test"));const view=await viewFiling(f);
+    expect(f.salary.annualSalary).toBeNull();expect(f.salary.salaryTds).toBeNull();expect(f.salary.employerName).toBeNull();
+    expect(f.salary.savingsInterest).toBe(7200);expect(f.salary.depositInterest).toBeNull();expect(f.scope.wantsDeductions).toBeNull();
+    expect(f.conversation?.connections.find(source=>source.kind==="employer")?.status).toBe("not_connected");
+    expect(view.chatCanReview).toBe(false);expect(view.chatQuestion?.id).toBe("salary.employerName");
+  });
+  it("asks about FD interest and home loan after a fictional Form 16, without treating a loan as a deduction",async()=>{
+    const f=populateDemo(await startDemo("owner","upload-form16","test"));
+    f.salary={...f.salary,employerName:"Demo Department of School Education",employerTan:"DEMO12345A",annualSalary:1520000,salaryTds:110000,employerNps:84000,basicDa:600000,eligible80C:150000,eligible80D:25000,professionalTax:2400,hraExemption:0};
+    f.scope.npsIncludedInSalary=true;
+    expect((await viewFiling(f)).chatQuestion?.id).toBe("salary.depositInterest");
+    f.salary.depositInterest=18000;
+    expect((await viewFiling(f)).chatQuestion?.id).toBe("demo.homeLoan");
+    const {filing:noLoan}=applyChatExtraction(f,{changes:[{section:"declarations",key:"loans",value:[],confidence:"high",evidence:"User explicitly said no home loan"}],uncertainties:[]});
+    expect(noLoan.demo?.homeLoanAnswer).toBe(false);
+    expect((await viewFiling(noLoan)).chatQuestion?.id).toBe("wantsDeductions");
+    const {filing:hasLoan}=applyChatExtraction(f,{changes:[{section:"declarations",key:"loans",value:["home"],confidence:"high",evidence:"User explicitly disclosed a home loan"}],uncertainties:[]});
+    expect(hasLoan.demo?.homeLoanAnswer).toBe(true);
+    expect(demoValidationIssues(hasLoan).some(issue=>issue.code==="loan_review")).toBe(true);
+  });
   it("finishes the one-question scenario after a conversational interest answer",async()=>{
     const awaitingInterest=populateDemo(await startDemo("owner","missing-interest","test"));
     const {filing:answered}=applyChatExtraction(awaitingInterest,{changes:[{section:"salary",key:"depositInterest",value:18000,confidence:"high",evidence:"User stated annual FD interest from bank statement"}],uncertainties:[]});

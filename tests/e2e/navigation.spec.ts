@@ -8,6 +8,7 @@ test("demo support pages, fee, status and acknowledgement stay accurate through 
 
   await page.goto("/");
   await expect(page.getByText("₹21 proposed service fee")).toBeVisible();
+  await page.getByRole("button",{name:/Everything connected/}).click();
   await page.getByRole("button",{name:/Experience the demo/}).click();
   await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
   const id=new URL(page.url()).pathname.split("/")[2];

@@ -11,8 +11,9 @@ import { recordConnectionsConfigured } from "@/server/records";
 import { effectiveProfile } from "@/lib/chat";
 import { understanding } from "@/server/ai";
 import { registerDocument,removeDocument,purgeExpired } from "@/server/documents";
+import { storeForm16Proposal,confirmForm16Proposal,rejectForm16Proposal } from "@/server/upload";
 import { eri,preparationPacket } from "@/server/eri";
-import { profileSchema } from "@/lib/domain";
+import { fieldNames, profileSchema } from "@/lib/domain";
 import { preparationIssues } from "@/lib/validation";
 import {startDemo,fetchDemo,submitDemo,verifyDemo,requireDemo} from "@/server/demo";
 import {geminiReady} from "@/server/gemini";
@@ -33,7 +34,7 @@ async function handler(request:Request,context:Context){
     checkProductionConfig();
     if(method!=="GET")verifyOrigin(request);
     if(route==="demo/start"&&method==="POST"){
-      requireDemo();const body=z.object({scenario:z.enum(["complete","missing-interest"]),consent:z.literal(true)}).strict().parse(await jsonBody(request));
+      requireDemo();const body=z.object({scenario:z.enum(["complete","missing-interest","upload-form16"]),consent:z.literal(true)}).strict().parse(await jsonBody(request));
       const user=await localLogin();actorId=user.id;await rateLimit(user.id,"demo_start",15,3600);
       return response(await viewFiling(await startDemo(user.id,body.scenario,requestId)),201);
     }
@@ -70,7 +71,7 @@ async function handler(request:Request,context:Context){
     }
     if(path[0]==="filings"&&path.length>=2){
       const id=z.uuid().parse(path[1]);const filing=await getFiling(user.id,id);const action=path[2];
-      if(filing.demo&&["submit","prefill","e-verify","acknowledgement","connect-records","upload","understand"].includes(action))throw new AppError(403,"demo_isolated","Demo records cannot access official filing or taxpayer-data services.");
+      if(filing.demo&&["submit","prefill","e-verify","acknowledgement","connect-records","understand"].includes(action))throw new AppError(403,"demo_isolated","Demo records cannot access official filing or taxpayer-data services.");
       if(path.length===3&&["demo-fetch","demo-submit","demo-verify"].includes(action)&&method==="POST"){
         requireDemo(filing);
         const body=z.object({revision:z.number().int(),confirmed:z.literal(true),hash:z.string().length(64).optional()}).strict().parse(await jsonBody(request));
@@ -81,7 +82,7 @@ async function handler(request:Request,context:Context){
       if(path.length===3&&action==="demo-receipt"&&method==="GET"){
         requireDemo(filing);if(!filing.demo!.acknowledgement)throw new AppError(409,"demo_incomplete","Complete the simulated verification before downloading the demo receipt.");
         const view=await viewFiling(filing);
-        return new Response(JSON.stringify({title:"DEMO ACKNOWLEDGEMENT — NOT AN OFFICIAL TAX RECEIPT",simulated:true,actuallyFiled:false,notice:"No Income Tax Department API was called. No real return was filed, refund initiated or payment made.",acknowledgement:filing.demo!.acknowledgement,assessmentYear:filing.year,taxpayer:"Aarav Sharma — fictional profile",calculation:view.estimates?.[filing.regime]},null,2),{headers:{"content-type":"application/json","content-disposition":'attachment; filename="SARAL-DEMO-NOT-FILED.json"',"cache-control":"no-store"}});
+        return new Response(JSON.stringify({title:"DEMO ACKNOWLEDGEMENT — NOT AN OFFICIAL TAX RECEIPT",simulated:true,actuallyFiled:false,notice:"No Income Tax Department API was called. No real return was filed, refund initiated or payment made.",acknowledgement:filing.demo!.acknowledgement,assessmentYear:filing.year,taxpayer:`${effectiveProfile(filing,await getProfile(user.id)).name||"Fictional employee"} — fictional profile`,calculation:view.estimates?.[filing.regime]},null,2),{headers:{"content-type":"application/json","content-disposition":'attachment; filename="SARAL-DEMO-NOT-FILED.json"',"cache-control":"no-store"}});
       }
       if(path.length===3&&action==="speech"&&method==="POST"){
         const body=z.object({text:z.string().trim().min(1).max(2200),aiConsent:z.literal(true),language:voiceLanguageSchema.optional()}).strict().parse(await jsonBody(request));
@@ -130,20 +131,30 @@ async function handler(request:Request,context:Context){
         await rateLimit(user.id,"ai",15,3600);
         await audit(auditEvent(user.id,id,"ai.processing_consented",requestId));
         const proposal=await understanding().understand(body.text);
-        const next=await saveFiling({...filing,pending:proposal,aiConsentAt:new Date().toISOString(),revision:filing.revision+1,updatedAt:new Date().toISOString()},filing.revision,auditEvent(user.id,id,"ai.proposal_created",requestId));
+        const next=await saveFiling({...filing,pending:proposal,pendingKind:"text",aiConsentAt:new Date().toISOString(),revision:filing.revision+1,updatedAt:new Date().toISOString()},filing.revision,auditEvent(user.id,id,"ai.proposal_created",requestId));
         return response(await viewFiling(next));
       }
       if(path.length===3&&action==="upload"&&method==="POST"){
-        assertEditable(filing);await rateLimit(user.id,"ai",15,3600);
+        assertEditable(filing);if(filing.pending)throw new AppError(409,"proposal_pending","Review or discard the previous extraction before uploading another document.");
+        await rateLimit(user.id,"ai",15,3600);
         const form=await multipartBody(request);const file=form.get("file");
         if(form.get("aiConsent")!=="true")throw new AppError(400,"consent_required","Consent to AI processing is required before extraction.");
         if(Number(form.get("revision"))!==filing.revision)throw new AppError(409,"revision_conflict","Reload this return before adding a document.");
         if(!(file instanceof File))throw new AppError(400,"file_required","Choose a salary document.");
+        if(filing.demo){requireDemo(filing);if(form.get("demoFictional")!=="true")throw new AppError(400,"fictional_document_required","Use only a fictional sample Form 16 in this demo and confirm that choice before uploading.");if(form.get("retain")==="true")throw new AppError(400,"demo_retention_disabled","The demo processes documents temporarily and never retains the raw upload.");}
         const provider=understanding();await audit(auditEvent(user.id,id,"ai.document_processing_consented",requestId));
-        const {bytes,mime}=await registerDocument(user.id,id,file,form.get("retain")==="true",requestId);
-        const proposal=await provider.understand("Read the attached document for FY 2025-26. Return only a proposed salary worksheet.",{bytes,mime});
-        const next=await saveFiling({...filing,pending:proposal,aiConsentAt:new Date().toISOString(),revision:filing.revision+1,updatedAt:new Date().toISOString()},filing.revision,auditEvent(user.id,id,"document.extracted",requestId));
+        const {bytes,mime}=await registerDocument(user.id,id,file,!filing.demo&&form.get("retain")==="true",requestId);
+        const proposal=await provider.understand("Read the attached Form 16 for FY 2025-26. Propose only annual values explicitly present. Flag other years, duplicate totals and uncertain information. Never infer zero from a blank. This is a draft for user review, not a filed ITR.",{bytes,mime});
+        const next=await storeForm16Proposal(filing,proposal,requestId);
         return response(await viewFiling(next));
+      }
+      if(path.length===4&&action==="upload"&&path[3]==="confirm"&&method==="POST"){
+        const body=z.object({revision:z.number().int().nonnegative(),confirmed:z.literal(true),selectedKeys:z.array(z.enum(fieldNames as [typeof fieldNames[number],...typeof fieldNames[number][]])).max(fieldNames.length)}).strict().parse(await jsonBody(request));
+        return response(await viewFiling(await confirmForm16Proposal(filing,body.revision,body.selectedKeys,requestId)));
+      }
+      if(path.length===4&&action==="upload"&&path[3]==="reject"&&method==="POST"){
+        const body=z.object({revision:z.number().int().nonnegative()}).strict().parse(await jsonBody(request));
+        return response(await viewFiling(await rejectForm16Proposal(filing,body.revision,requestId)));
       }
       if(path.length===3&&action==="transcribe"&&method==="POST"){
         assertEditable(filing);await rateLimit(user.id,"voice",15,3600);const form=await multipartBody(request);const audio=form.get("audio");

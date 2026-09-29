@@ -48,10 +48,10 @@ export type Proposal = z.infer<typeof proposalSchema>;
 export type Issue = {code:string; field?: string; severity:"error"|"warning"; message:string};
 export type FilingStatus = "draft"|"prepared"|"submission_pending"|"submitted"|"verification_pending"|"verified";
 export interface Filing {
-  demo?: {scenario:"complete"|"missing-interest";phase:"created"|"records_ready"|"submitted"|"verified";reference:string|null;acknowledgement:{number:string;receivedAt:string;simulated:true}|null};
+  demo?: {scenario:"complete"|"missing-interest"|"upload-form16";phase:"created"|"records_ready"|"submitted"|"verified";homeLoanAnswer?:boolean|null;reference:string|null;acknowledgement:{number:string;receivedAt:string;simulated:true}|null};
   conversation?:ChatState;
   id:string; ownerId:string; year:typeof ASSESSMENT_YEAR; revision:number; createdAt:string; updatedAt:string; status:FilingStatus;
-  salary:Salary; scope:z.infer<typeof scopeSchema>; declarations:Declarations; confirmedFields:FieldName[]; pending:Proposal|null; regime:"new"|"old";
+  salary:Salary; scope:z.infer<typeof scopeSchema>; declarations:Declarations; confirmedFields:FieldName[]; pending:Proposal|null; pendingKind?:"form16"|"text"|null; regime:"new"|"old";
   processingConsentAt:string; aiConsentAt:string|null; prefillConsentAt:string|null; prefill:Partial<Salary>|null;
   prefillSource:"unavailable"|"official"; reviewHash:string|null; reviewConfirmedAt:string|null;
   officialReference:string|null; acknowledgement: {number:string; receivedAt:string; url?:string}|null;
@@ -66,7 +66,7 @@ export const editableFilingSchema = z.object({
 export function requiredFields(filing: Pick<Filing,"salary"|"scope">): FieldName[] {
   const fields:FieldName[] = ["annualSalary","salaryTds","savingsInterest","depositInterest","otherTds","employerNps"];
   if ((filing.salary.employerNps ?? 0)>0) fields.push("basicDa");
-  if (filing.scope.wantsDeductions) fields.push("eligible80C","eligible80D","professionalTax","hraExemption");
+  if (filing.scope.wantsDeductions || (["eligible80C","eligible80D","professionalTax","hraExemption"] as const).some(key=>filing.salary[key]!==null)) fields.push("eligible80C","eligible80D","professionalTax","hraExemption");
   return fields;
 }
 export function inr(value:number) { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(value); }

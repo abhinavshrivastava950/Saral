@@ -8,8 +8,31 @@ import type { Filing } from "@/lib/domain";
 
 export function Login({session,onSignedIn}:{session:Session;onSignedIn:()=>Promise<void>}){
   const[email,setEmail]=useState("");const[consent,setConsent]=useState(false);const[busy,setBusy]=useState(false);const[message,setMessage]=useState("");const[error,setError]=useState("");const router=useRouter();
+  const demo=session.mode==="local";
   async function run(local:boolean){setBusy(true);setError("");try{if(local){await post("auth/local",{sampleDataOnly:true});await onSignedIn();router.push("/filings/new");}else{const r=await post<{message:string}>("auth/magic-link",{email});setMessage(r.message);}}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
-  return <div className="narrow-page"><div className="eyebrow">WELCOME TO SARAL · सरल में आपका स्वागत है</div><h1>Your tax journey, made simpler.</h1><p>Sign in securely with an email link. No new password to remember.</p><section className="card form-section login-panel"><span className="large-feature-icon"><LockKeyhole size={28}/></span><h2>A secure space for your return.</h2><form onSubmit={e=>{e.preventDefault();void run(false);}}><div className="field"><label htmlFor="email">Email address · ईमेल</label><input id="email" type="email" autoComplete="email" required placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></div><button className="button full-width" disabled={busy||session.mode==="local"||!session.authConfigured}><Mail size={17}/> Send secure sign-in link</button></form>{message&&<div role="status" className="notice success">{message}</div>}{error&&<div role="alert" className="error">{error}</div>}{session.mode==="local"&&<div className="local-login"><h3>Explore the local workspace</h3><p>Production sign-in needs a Supabase connection. You can test the preparation workflow with fictional data on this computer.</p><label className="check-row"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/><span>I’ll use sample information only. This is not a production taxpayer account.</span></label><button className="button secondary full-width" disabled={!consent||busy} onClick={()=>run(true)}>{busy?<Loader2 className="spin" size={18}/>:<>Open sample workspace <ArrowRight size={17}/></>}</button></div>}<p className="microcopy">We never ask for your Income Tax portal password or Aadhaar OTP.</p></section></div>;
+  return <div className="narrow-page">
+    <div className="eyebrow">WELCOME TO SARAL · सरल में आपका स्वागत है</div>
+    <h1>{demo?"Try the interactive demo.":"Your tax journey, made simpler."}</h1>
+    <p>{demo?"Explore the full preparation journey with fictional records. No real taxpayer account or official filing is connected.":"Sign in with a secure email link. No password to remember."}</p>
+    <section className="card form-section login-panel">
+      <span className="large-feature-icon"><LockKeyhole size={28}/></span>
+      {session.user?<>
+        <h2>{demo?"Your sample workspace is open.":"You’re signed in."}</h2>
+        <p>{demo?"Continue your fictional ITR journey. This session cannot access real taxpayer records.":"Continue to your private workspace."}</p>
+        <Link className="button full-width" href="/filings/new">Continue to workspace <ArrowRight size={17}/></Link>
+      </>:demo?<>
+        <h2>Open the sample workspace · डेमो शुरू करें</h2>
+        <p>Try chat, Hindi voice, review and a clearly marked simulated acknowledgement. Real email sign-in requires a configured Supabase project.</p>
+        <label className="check-row"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/><span>I’ll use fictional information only. This is a demo session, not a taxpayer account.</span></label>
+        <button className="button full-width" type="button" disabled={!consent||busy} onClick={()=>void run(true)}>{busy?<Loader2 className="spin" size={18}/>:<>Open sample workspace <ArrowRight size={17}/></>}</button>
+      </>:session.authConfigured?<>
+        <h2>A secure space for your return.</h2>
+        <form onSubmit={e=>{e.preventDefault();void run(false);}}><div className="field"><label htmlFor="email">Email address · ईमेल</label><input id="email" type="email" autoComplete="email" required placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></div><button className="button full-width" disabled={busy}>{busy?<Loader2 className="spin" size={18}/>:<Mail size={17}/>} Send secure sign-in link</button></form>
+      </>:<div className="notice">Email sign-in is unavailable until Supabase authentication is configured.</div>}
+      {message&&<div role="status" className="notice success">{message}</div>}{error&&<div role="alert" className="error">{error}</div>}
+      <p className="microcopy">We never ask for your Income Tax portal password or Aadhaar OTP.</p>
+    </section>
+  </div>;
 }
 export function FilingsPage({session}:{session:Session}){
   const[filings,setFilings]=useState<Filing[]>([]);const[error,setError]=useState("");const[loaded,setLoaded]=useState(false);const[deleting,setDeleting]=useState<string|null>(null);

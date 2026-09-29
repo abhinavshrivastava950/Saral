@@ -2,7 +2,7 @@ import {test,expect} from "@playwright/test";
 import {installVoiceMocks} from "./voice-mocks";
 const origin={Origin:"http://127.0.0.1:3000"};
 async function begin(page:import('@playwright/test').Page){
-  await page.goto("/");await page.getByRole("button",{name:/Experience the demo/}).click();await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
+  await page.goto("/");await page.getByRole("button",{name:/Everything connected/}).click();await page.getByRole("button",{name:/Experience the demo/}).click();await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
   const id=new URL(page.url()).pathname.split("/")[2];
   await page.getByRole("button",{name:"Voice call",exact:true}).click();await expect(page.getByLabel("बातचीत की भाषा")).toHaveValue("hi");
   await page.getByRole("button",{name:"Agree & start voice call"}).click();await expect(page.getByRole("heading",{name:"I’m listening."})).toBeVisible();return id;
@@ -39,7 +39,7 @@ test("Hindi voice correction saves to the bound draft while browsing and invalid
     const patched=await page.request.patch(`/api/filings/${id}`,{headers:origin,data:{revision:before.filing.revision,salary:{...before.filing.salary,depositInterest:22500}}});expect(patched.ok()).toBe(true);
     await route.fulfill({json:{...await patched.json(),voiceReply:"ठीक है। एफडी का सालाना ब्याज अब बाईस हजार पांच सौ रुपये दर्ज है। मसौदा सेव हो गया है।"}});
   });
-  await page.goto("/");await page.getByRole("button",{name:/Experience the demo/}).click();await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
+  await page.goto("/");await page.getByRole("button",{name:/Everything connected/}).click();await page.getByRole("button",{name:/Experience the demo/}).click();await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
   const id=new URL(page.url()).pathname.split("/")[2];await page.getByRole("button",{name:"Read the prepared details"}).click();await page.getByRole("button",{name:/Approve summary/}).click();await expect(page.getByRole("button",{name:"Simulate filing my ITR"})).toBeVisible();
   await page.getByRole("button",{name:"Voice call",exact:true}).click();await page.getByRole("button",{name:"Agree & start voice call"}).click();await expect(page.getByRole("heading",{name:"I’m listening."})).toBeVisible();
   await page.getByRole("button",{name:"Minimize voice call"}).click();await page.getByRole("link",{name:"Help & guide · सहायता"}).click();

@@ -25,14 +25,18 @@ export function applyChatExtraction(f:Filing,extraction:ChatExtraction):{filing:
     target[change.key]=parsed.data;c.factConfidence[key]=change.confidence;c.evidence[key]=maskSensitive(change.evidence);
     c.pendingIssues=c.pendingIssues.filter(x=>!x.startsWith(key+":"));
     const label=change.section==="salary"?labels[change.key as FieldName]:change.section==="profile"?profileLabels[change.key as keyof Profile]:change.section==="scope"?scopeLabels[change.key as keyof Filing["scope"]]:change.key;
-    const display=typeof parsed.data==="boolean"?parsed.data?"Yes":"No":Array.isArray(parsed.data)?parsed.data.join(", "):String(parsed.data);
+    const display=typeof parsed.data==="boolean"?parsed.data?"Yes":"No":Array.isArray(parsed.data)?parsed.data.length?parsed.data.join(", "):"None stated":String(parsed.data);
     changes.push(`${label}: ${maskSensitive(display)}`);
+  }
+  if(next.demo?.scenario==="upload-form16"){
+    const loanAnswer=extraction.changes.find(change=>change.section==="declarations"&&change.key==="loans"&&Array.isArray(change.value));
+    if(loanAnswer&&Array.isArray(loanAnswer.value))next.demo.homeLoanAnswer=loanAnswer.value.includes("home");
   }
   if(changes.length)c.pendingIssues=c.pendingIssues.filter(issue=>!issue.startsWith("answer:"));
   for(const issue of extraction.uncertainties){const message="answer: "+maskSensitive(issue);if(!c.pendingIssues.includes(message))c.pendingIssues.push(message);}
   const dob=c.profileDraft.dateOfBirth;
   if(dob&&profileSchema.shape.dateOfBirth.safeParse(dob).success)next.scope.under60=dob>"1966-04-01"&&dob<="2008-03-31";
-  c.pendingIssues=c.pendingIssues.slice(0,12);c.confirmedAt=null;next.confirmedFields=[];next.reviewHash=null;next.reviewConfirmedAt=null;next.status="draft";next.pending=null;
+  c.pendingIssues=c.pendingIssues.slice(0,12);c.confirmedAt=null;next.confirmedFields=[];next.reviewHash=null;next.reviewConfirmedAt=null;next.status="draft";next.pending=null;next.pendingKind=null;
   return {filing:next,changes};
 }
 async function persistChat(original:Filing,next:Filing,requestId:string,action:string){
@@ -41,7 +45,9 @@ async function persistChat(original:Filing,next:Filing,requestId:string,action:s
   return saveFiling(next,original.revision,auditEvent(next.ownerId,next.id,action,requestId));
 }
 export async function sendChatMessage(f:Filing,text:string,aiConsent:boolean,profile:Profile,requestId:string,language:VoiceLanguage="auto"):Promise<Filing>{
-  assertEditable(f);const next=structuredClone(f),c=next.conversation??=initialConversation();
+  assertEditable(f);
+  if(f.pending)throw new AppError(409,"proposal_pending","Review or discard the document extraction before continuing the conversation.");
+  const next=structuredClone(f),c=next.conversation??=initialConversation();
   const panMatches=text.toUpperCase().match(/\b[A-Z]{5}\d{4}[A-Z]\b/g);
   if(f.demo&&panMatches?.length)throw new AppError(422,"demo_identity","This demo uses Aarav’s fictional profile. Please do not enter a real PAN.");
   if(panMatches?.length&&new Set(panMatches).size>1)throw new AppError(422,"multiple_pans","Please send only the PAN for the person whose return we are preparing.");
