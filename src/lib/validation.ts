@@ -34,7 +34,9 @@ export function filingIssues(f:Filing, profile:Profile):Issue[] {
   if (profile.dateOfBirth && (profile.dateOfBirth<="1966-04-01" || profile.dateOfBirth>"2008-03-31" || Number.isNaN(Date.parse(profile.dateOfBirth)))) issues.push({code:"age_review",severity:"error",message:"Age or date of birth needs assisted review for this release."});
   for (const field of ["employerName","employerTan"] as const) if (!f.salary[field] || !f.confirmedFields.includes(field)) issues.push({code:"employer_missing",field,severity:"error",message:"Confirm employer name and TAN from your salary/TDS statement."});
   if (f.prefillSource!=="official") issues.push({code:"prefill_pending",severity:"error",message:"Official prefill and tax-credit reconciliation have not been completed."});
-  if (f.prefill) for (const [field,value] of Object.entries(f.prefill)) {
+  // Only an official prefill is authoritative. Demo fixtures and unavailable
+  // connections must never block a user's explicit correction.
+  if (f.prefillSource==="official" && f.prefill) for (const [field,value] of Object.entries(f.prefill)) {
     if (value!==null && value!==f.salary[field as keyof typeof f.salary]) issues.push({code:"prefill_mismatch",field,severity:"error",message:"Your confirmed value differs from official prefill. Resolve the discrepancy before filing."});
   }
   // Deliberate fail-closed launch gates. Do not remove until approved AY schema, filing-date and fee logic are integrated.

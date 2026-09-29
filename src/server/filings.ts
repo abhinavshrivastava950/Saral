@@ -20,7 +20,8 @@ export async function updateFiling(f:Filing,raw:unknown,requestId:string){
   let confirmed=patch.confirmedFields??f.confirmedFields;
   if(patch.salary&&!patch.confirmedFields)confirmed=confirmed.filter(k=>f.salary[k]===patch.salary![k]);
   const salary=patch.salary??f.salary;confirmed=confirmed.filter(k=>salary[k]!==null);
-  const updated={...f,...fields,salary,confirmedFields:[...new Set(confirmed)],status:"draft" as const,pending:null,reviewHash:null,reviewConfirmedAt:null,revision:f.revision+1,updatedAt:new Date().toISOString()};
+  const conversation=f.conversation?{...f.conversation,confirmedAt:null}:undefined;
+  const updated={...f,...fields,salary,conversation,confirmedFields:[...new Set(confirmed)],status:"draft" as const,pending:null,reviewHash:null,reviewConfirmedAt:null,revision:f.revision+1,updatedAt:new Date().toISOString()};
   return saveFiling(updated,f.revision,auditEvent(f.ownerId,f.id,"filing.fields_confirmed",requestId,{fieldCount:confirmed.length}));
 }
 export function snapshotHash(f:Filing,p:Profile){return hash({year:f.year,salary:f.salary,scope:f.scope,declarations:f.declarations,confirmed:f.confirmedFields,regime:f.regime,prefill:f.prefill,profile:effectiveProfile(f,p),rule:"AY2026-27-salary-v1"});}
