@@ -10,6 +10,7 @@ import "@fontsource/noto-sans-devanagari/600.css";
 import "./globals.css";
 import "./chat.css";
 import "./experience.css";
+import "./demo-workspace.css";
 import "./voice-session.css";
 
 export const metadata: Metadata = {

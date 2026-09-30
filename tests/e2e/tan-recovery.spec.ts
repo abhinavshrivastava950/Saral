@@ -1,0 +1,30 @@
+import {test,expect} from "@playwright/test";
+
+test("TAN typo gets useful guidance and a bare correction restores the automatic demo",async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto("/");
+  await page.getByRole("button",{name:/Everything connected/}).click();
+  await page.getByRole("button",{name:/Experience the demo/}).click();
+  await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Extract sample Form 16"})).not.toBeVisible();
+  const id=new URL(page.url()).pathname.split("/")[2];
+  const before=await (await page.request.get(`/api/filings/${id}`)).json();
+  const response=await page.request.patch(`/api/filings/${id}`,{headers:{Origin:"http://127.0.0.1:3000"},data:{revision:before.filing.revision,salary:{...before.filing.salary,employerTan:null}}});
+  expect(response.ok()).toBe(true);
+  await page.reload();
+  await expect(page.getByRole("heading",{name:"Check the employer TAN"})).toBeVisible();
+  await expect(page.getByRole("log",{name:"Demo conversation"})).not.toBeVisible();
+  expect(await page.locator(".sidebar").evaluate(el=>el.scrollHeight<=el.clientHeight+1)).toBe(true);
+  await page.getByRole("button",{name:"Enable AI chat"}).click();
+  await page.getByRole("textbox",{name:"Message Saral"}).fill("DEM012345A");
+  await page.getByRole("button",{name:"Send message"}).click();
+  await expect(page.locator('.demo-workspace [role="alert"]')).toContainText("O (letter) versus 0 (zero)");
+  await page.getByRole("textbox",{name:"Message Saral"}).fill("DEMO12345A");
+  await page.getByRole("button",{name:"Send message"}).click();
+  await expect(page.getByText("YOUR DEMO RETURN IS PREPARED")).toBeVisible();
+  const saved=await (await page.request.get(`/api/filings/${id}`)).json();
+  expect(saved.filing.salary.employerTan).toBe("DEMO12345A");
+  expect(saved.estimates.new.estimatedRefund).toBe(22830);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

@@ -26,6 +26,23 @@ describe("fetch-first chat",()=>{
   it("PAN change clears records and invalidates previous approval",async()=>{const f=complete();f.status="prepared";f.reviewHash="old";const n=await sendChatMessage(f,"BBBBB1234B",false,profile,"test");expect(n.salary.annualSalary).toBeNull();expect(n.conversation!.connections.every(c=>c.status==="not_connected")).toBe(true);expect(n.reviewHash).toBeNull();expect(effectiveProfile(n,profile).name).toBe("");expect(mocks.extract).not.toHaveBeenCalled();});
   it("AI corrections update drafts without silently confirming",()=>{const f=complete();f.reviewHash="old";f.confirmedFields=["salaryTds"];const r=applyChatExtraction(f,{changes:[{section:"salary",key:"salaryTds",value:110000,confidence:"high",evidence:"Explicit correction"}],uncertainties:[]});expect(r.filing.salary.salaryTds).toBe(110000);expect(r.filing.confirmedFields).toEqual([]);expect(r.filing.reviewHash).toBeNull();expect(r.changes).toHaveLength(1);});
   it("invalid AI values cannot enter tax data",()=>{const r=applyChatExtraction(complete(),{changes:[{section:"salary",key:"salaryTds",value:-1,confidence:"high",evidence:"bad"}],uncertainties:[]});expect(r.filing.salary.salaryTds).toBe(100000);expect(r.filing.conversation!.pendingIssues.length).toBeGreaterThan(0);});
+  it("accepts a bare TAN deterministically and clears an earlier validation loop",async()=>{
+    const f=complete();f.salary.employerTan=null;f.conversation!.pendingIssues=["salary.employerTan: I could not validate this value."];
+    const question=nextChatQuestion(f,profile);expect(question?.id).toBe("confirm:salary.employerTan");expect(question?.text).not.toContain("salary.employerTan");
+    const updated=await sendChatMessage(f,"demo12345a",true,profile,"test");
+    expect(updated.salary.employerTan).toBe("DEMO12345A");expect(updated.conversation!.pendingIssues).toEqual([]);expect(updated.salary.salaryTds).toBe(f.salary.salaryTds);expect(mocks.extract).not.toHaveBeenCalled();
+  });
+  it("explains an O/zero TAN typo without guessing a replacement",async()=>{
+    const f=complete();f.salary.employerTan=null;
+    await expect(sendChatMessage(f,"DEM012345A",true,profile,"test")).rejects.toMatchObject({code:"invalid_employer_tan"});
+    expect(f.salary.employerTan).toBeNull();expect(mocks.extract).not.toHaveBeenCalled();expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("normalizes TAN letter case from extraction without changing identifier characters",()=>{
+    const fixed=applyChatExtraction(complete(),{changes:[{section:"salary",key:"employerTan",value:" demo12345a ",confidence:"high",evidence:"User supplied TAN"}],uncertainties:[]});
+    expect(fixed.filing.salary.employerTan).toBe("DEMO12345A");
+    const invalid=applyChatExtraction(complete(),{changes:[{section:"salary",key:"employerTan",value:"DEM012345A",confidence:"high",evidence:"Unclear TAN"}],uncertainties:[]});
+    expect(invalid.filing.salary.employerTan).toBe("ABCD12345E");
+  });
   it("a new complete answer resolves the matching uncertainty",()=>{const f=complete();f.conversation!.pendingIssues=["salary.salaryTds: invalid","answer: unclear value"];const r=applyChatExtraction(f,{changes:[{section:"salary",key:"salaryTds",value:50000,confidence:"high",evidence:"Corrected"}],uncertainties:[]});expect(r.filing.conversation!.pendingIssues).toEqual([]);});
   it("review is bound to the exact prepared snapshot and never submits",async()=>{const f=complete();const v=await viewFiling(f);await expect(confirmChatReview(f,"0".repeat(64),"test")).rejects.toMatchObject({code:"review_changed"});const approved=await confirmChatReview(f,v.chatReviewHash,"test");expect(approved.status).toBe("prepared");expect(approved.officialReference).toBeNull();expect(approved.confirmedFields).toContain("annualSalary");});
 });

@@ -18,8 +18,9 @@ export function applyChatExtraction(f:Filing,extraction:ChatExtraction):{filing:
     if(change.section==="profile"&&change.key==="pan")continue;
     const shape=change.section==="salary"?salarySchema.shape:change.section==="profile"?profileSchema.shape:change.section==="scope"?scopeSchema.shape:declarationsSchema.shape;
     const schema=Object.hasOwn(shape,change.key)?(shape as Record<string,{safeParse:(v:unknown)=>{success:boolean;data?:unknown}}>)[change.key]:undefined;
-    const parsed=schema?.safeParse(change.value);
-    if(!parsed?.success){c.pendingIssues.push(`${key}: I could not validate this value.`);continue;}
+    const value=key==="salary.employerTan"&&typeof change.value==="string"?change.value.trim().toUpperCase():change.value;
+    const parsed=schema?.safeParse(value);
+    if(!parsed?.success){const issue=`${key}: I could not validate this value.`;if(!c.pendingIssues.includes(issue))c.pendingIssues.push(issue);continue;}
     if(change.value===null){c.factConfidence[key]="low";continue;}
     const target=(change.section==="profile"?c.profileDraft:next[change.section]) as Record<string,unknown>;
     target[change.key]=parsed.data;c.factConfidence[key]=change.confidence;c.evidence[key]=maskSensitive(change.evidence);
@@ -72,10 +73,16 @@ export async function sendChatMessage(f:Filing,text:string,aiConsent:boolean,pro
   }
   if(!aiConsent)throw new AppError(403,"ai_consent_required","Please allow AI processing of your chosen answer before continuing.");
   await audit(auditEvent(f.ownerId,f.id,"ai.chat_processing_consented",requestId));
-  // Handle explicitly requested refund account without sending its number to an LLM.
+  // Exact identifiers use deterministic format validation; never guess O/0 substitutions.
   let extracted:ChatExtraction;
+  const tanExpected=question?.id==="salary.employerTan"||question?.id==="confirm:salary.employerTan";
+  const bareTan=text.trim().toUpperCase();
   const bankMatch=text.match(/\b\d{9,18}\b/);
-  if(bankMatch&&(question?.id==="profile.bankAccount"||question?.id==="confirm:profile.bankAccount"||/\b(bank|account)\b|खाता/i.test(text)))extracted={changes:[{section:"profile",key:"bankAccount",value:bankMatch[0],confidence:"high",evidence:"User supplied the requested refund account"}],uncertainties:[]};
+  if(tanExpected&&/^[A-Z0-9]{10}$/.test(bareTan)){
+    if(!salarySchema.shape.employerTan.safeParse(bareTan).success)throw new AppError(422,"invalid_employer_tan","Employer TAN needs 4 letters, 5 digits and 1 final letter. Check O (letter) versus 0 (zero), then copy the value from your Form 16.");
+    extracted={changes:[{section:"salary",key:"employerTan",value:bareTan,confidence:"high",evidence:"User explicitly supplied the employer TAN after checking Form 16"}],uncertainties:[]};
+  }
+  else if(bankMatch&&(question?.id==="profile.bankAccount"||question?.id==="confirm:profile.bankAccount"||/\b(bank|account)\b|खाता/i.test(text)))extracted={changes:[{section:"profile",key:"bankAccount",value:bankMatch[0],confidence:"high",evidence:"User supplied the requested refund account"}],uncertainties:[]};
   else extracted=await interpretAnswer(next,profile,text);
   const applied=applyChatExtraction(next,extracted);const updated=applied.filing;updated.aiConsentAt=new Date().toISOString();
   updated.conversation!.messages.push(chatMessage("assistant",applied.changes.length?"I’ve updated the draft behind the scenes:\n"+applied.changes.join("\n")+"\nYou’ll approve the full summary before filing.":"I haven’t changed your tax details from that answer. Please clarify the missing information below."));
